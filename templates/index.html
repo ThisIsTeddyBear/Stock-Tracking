@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Tracking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1e2430;
+      --border:    #2a3040;
+      --border2:   #363e4f;
+      --text:      #e6edf3;
+      --text-muted:#7d8590;
+      --green:     #3fb950;
+      --green-bg:  #1a3a25;
+      --red:       #f85149;
+      --red-bg:    #3a1a1a;
+      --amber:     #d29922;
+      --amber-bg:  #3a2e0a;
+      --accent:    #58a6ff;
+      --accent-bg: #1a2a3a;
+      --purple:    #bc8cff;
+      --mono:      'JetBrains Mono', monospace;
+      --sans:      'DM Sans', sans-serif;
+    }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-left h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.3px;
+    }
+    .header-left p {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    #last-refreshed {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: var(--mono);
+    }
+
+    /* ── BUTTONS ── */
+    .btn {
+      font-family: var(--sans);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 7px 14px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      transition: opacity 0.15s, background 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn:active { opacity: 0.7; }
+    .btn-primary { background: var(--accent); color: #0d1117; }
+    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border2); }
+    .btn-danger { background: var(--red-bg); color: var(--red); border: 1px solid #5a2020; font-size: 12px; padding: 4px 9px; }
+    .btn-edit-sm { background: var(--accent-bg); color: var(--accent); border: 1px solid #1e3a5a; font-size: 12px; padding: 4px 9px; }
+
+    /* ── LOADING BAR ── */
+    #price-loading {
+      background: var(--amber-bg);
+      color: var(--amber);
+      text-align: center;
+      padding: 8px;
+      font-size: 13px;
+      font-family: var(--mono);
+      border-bottom: 1px solid #5a4a0a;
+    }
+
+    /* ── STATS BAR ── */
+    .stats-bar {
+      display: flex;
+      gap: 12px;
+      padding: 16px 24px;
+      overflow-x: auto;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 20px;
+      min-width: 160px;
+      flex: 1;
+    }
+    .stat-card .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+    .stat-card .stat-value {
+      font-family: var(--mono);
+      font-size: 28px;
+      font-weight: 600;
+      margin-top: 4px;
+      color: var(--text);
+    }
+    .stat-card.green .stat-value { color: var(--green); }
+    .stat-card.red .stat-value { color: var(--red); }
+
+    /* ── TABLE WRAPPER ── */
+    .table-wrapper {
+      padding: 0 24px 40px;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1100px;
+    }
+    th {
+      background: var(--surface);
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    td {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    tbody tr { background: var(--bg); transition: background 0.1s; }
+    tbody tr:hover { background: var(--surface); }
+    tbody tr:last-child td { border-bottom: none; }
+
+    .mono { font-family: var(--mono); }
+    .muted { color: var(--text-muted); }
+    .green { color: var(--green); }
+    .red { color: var(--red); }
+    .amber { color: var(--amber); }
+
+    .stock-name { font-weight: 600; color: var(--text); }
+    .ticker-cell { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+
+    .notes-cell {
+      max-width: 180px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+    .actions-cell { white-space: nowrap; display: flex; gap: 6px; }
+
+    /* ── BADGES ── */
+    .badge {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      letter-spacing: 0.3px;
+    }
+    .badge-green { background: var(--green-bg); color: var(--green); border: 1px solid #2a6a35; }
+    .badge-outline { background: transparent; color: var(--text-muted); border: 1px solid var(--border2); }
+    .badge-red { background: var(--red-bg); color: var(--red); border: 1px solid #6a2020; }
+    .badge-outline-red { background: transparent; color: var(--text-muted); border: 1px solid var(--border2); }
+
+    .status-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+    .status-active { background: var(--green-bg); color: var(--green); border: 1px solid #2a6a35; }
+    .status-watching { background: var(--accent-bg); color: var(--accent); border: 1px solid #1a3a5a; }
+    .status-exited { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border2); }
+    .status-stopped { background: var(--red-bg); color: var(--red); border: 1px solid #5a2020; }
+
+    .error-badge { color: var(--red); font-size: 12px; font-family: var(--mono); }
+    .fetch-warn { color: var(--amber); font-size: 11px; cursor: help; }
+
+    /* ── EMPTY STATE ── */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+    .empty-state h3 { font-size: 18px; margin-bottom: 8px; color: var(--text); }
+    .empty-state p { font-size: 14px; }
+
+    /* ── MODAL ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 12px;
+      width: 100%;
+      max-width: 540px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-header h2 { font-size: 17px; font-weight: 700; }
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 22px;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      line-height: 1;
+    }
+    .modal-close:hover { background: var(--surface2); color: var(--text); }
+
+    .modal-body { padding: 20px 24px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-group.full { grid-column: 1 / -1; }
+    label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    input, select, textarea {
+      font-family: var(--sans);
+      font-size: 13px;
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 8px 10px;
+      width: 100%;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    input.mono-input { font-family: var(--mono); }
+    textarea { resize: vertical; min-height: 70px; }
+    select option { background: var(--surface2); }
+    .yf-preview {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      margin-top: 4px;
+    }
+    .form-error { color: var(--red); font-size: 12px; margin-top: 4px; }
+    .modal-footer {
+      padding: 16px 24px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    /* ── CONFIRM DIALOG ── */
+    .confirm-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .confirm-box {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      padding: 24px;
+      max-width: 360px;
+      width: 90%;
+      text-align: center;
+    }
+    .confirm-box p { margin-bottom: 18px; color: var(--text); }
+    .confirm-box .confirm-btns { display: flex; gap: 10px; justify-content: center; }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #4a5568; }
+
+    /* ── AUTOCOMPLETE ── */
+    .ac-dropdown {
+      background: #1e2433;
+      border: 1px solid #3a4460;
+      border-radius: 0 0 6px 6px;
+      max-height: 240px;
+      overflow-y: auto;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    .ac-item {
+      padding: 10px 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid #2a3450;
+      font-size: 13px;
+      user-select: none;
+    }
+    .ac-item:last-child { border-bottom: none; }
+    .ac-item:hover { background: #2a3350; }
+    .ac-item.highlighted { background: #2e3d6b; }
+    .ac-ticker { font-family: var(--mono); color: #58a6ff; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+    .ac-name { color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ac-exchange { font-size: 10px; color: var(--text-muted); background: var(--surface2); padding: 2px 6px; border-radius: 3px; flex-shrink: 0; }
+    .ac-status { padding: 12px 14px; color: var(--text-muted); font-size: 12px; font-style: italic; }
+
+    /* ── NO-TARGET PILL ── */
+    .badge-no-target {
+      display: inline-block;
+      background: #222;
+      color: #555;
+      font-size: 11px;
+      border-radius: 10px;
+      padding: 2px 8px;
+      font-family: var(--sans);
+      font-weight: 500;
+    }
+
+    /* ── HISTORICAL PRICE CHIP ── */
+    .hist-status {
+      font-size: 11px;
+      color: var(--accent);
+      font-style: italic;
+      margin-top: 4px;
+      min-height: 16px;
+      display: block;
+    }
+    .hist-chip {
+      background: #162016;
+      border: 1px solid #2d5a2d;
+      border-radius: 6px;
+      padding: 10px 14px;
+    }
+    .hist-chip.error {
+      background: #201616;
+      border-color: #5a2d2d;
+    }
+    .hist-chip-msg {
+      font-size: 12px;
+      color: var(--text);
+      margin-bottom: 8px;
+      line-height: 1.5;
+    }
+    .hist-chip-msg strong { color: var(--green); }
+    .hist-chip.error .hist-chip-msg { color: var(--red); }
+    .hist-chip-btns { display: flex; align-items: center; gap: 12px; }
+    .btn-hist-use {
+      font-size: 12px;
+      padding: 4px 11px;
+      background: transparent;
+      border: 1px solid var(--green);
+      color: var(--green);
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: var(--sans);
+      font-weight: 500;
+    }
+    .btn-hist-use:hover { background: var(--green-bg); }
+    .btn-hist-dismiss {
+      font-size: 12px;
+      color: var(--text-muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: var(--sans);
+    }
+    .btn-hist-dismiss:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-left">
+      <h1>Stock Tracking</h1>
+      <p>General Stock Tracking Dashboard</p>
+    </div>
+    <div class="header-right">
+      <span id="last-refreshed"></span>
+      <button class="btn btn-secondary" id="refresh-btn">&#8635; Refresh Prices</button>
+      <button class="btn btn-primary" id="add-btn">+ Add Stock</button>
+    </div>
+  </header>
+
+  <!-- LOADING BAR -->
+  <div id="price-loading" style="display:none;">Fetching latest prices&hellip;</div>
+
+  <!-- STATS BAR -->
+  <div class="stats-bar">
+    <div class="stat-card">
+      <div class="stat-label">Total Recommendations</div>
+      <div class="stat-value" id="stat-total">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Active Positions</div>
+      <div class="stat-value" id="stat-active">—</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">T1 Hit</div>
+      <div class="stat-value" id="stat-t1">—</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-label">Stop Loss Hit</div>
+      <div class="stat-value" id="stat-sl">—</div>
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Stock Name</th>
+          <th>Ticker</th>
+          <th>Exch</th>
+          <th>Rec Date</th>
+          <th>Entry &#8377;</th>
+          <th>Latest Price</th>
+          <th>Gain/Loss &#8377;</th>
+          <th>Gain/Loss %</th>
+          <th>Targets</th>
+          <th>SL</th>
+          <th>Next Target</th>
+          <th>Status</th>
+          <th>Notes</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="stocks-tbody">
+        <tr>
+          <td colspan="14" class="empty-state">
+            <p style="color:var(--text-muted);padding:30px 0;">Loading&hellip;</p>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ADD / EDIT MODAL -->
+  <div id="modal-overlay" class="modal-overlay" style="display:none;">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modal-title">Add Stock Recommendation</h2>
+        <button class="modal-close" id="modal-close-btn" title="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="form-error" class="form-error" style="display:none;margin-bottom:12px;"></div>
+        <form id="stock-form" autocomplete="off">
+          <div class="form-grid">
+            <div class="form-group full">
+              <label for="f-stock-name">Stock Name *</label>
+              <div style="position:relative;">
+                <input type="text" id="f-stock-name" placeholder="e.g. Reliance Industries" autocomplete="off" />
+                <div id="ac-dd-name" class="ac-dropdown" style="display:none;position:fixed;z-index:9999;"></div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="f-ticker">Ticker Symbol *</label>
+              <div style="position:relative;">
+                <input type="text" id="f-ticker" class="mono-input" placeholder="e.g. RELIANCE" style="text-transform:uppercase;" autocomplete="off" />
+                <div id="ac-dd-ticker" class="ac-dropdown" style="display:none;position:fixed;z-index:9999;"></div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="f-exchange">Exchange *</label>
+              <select id="f-exchange">
+                <option value="NSE">NSE</option>
+                <option value="BSE">BSE</option>
+              </select>
+            </div>
+            <div class="form-group full">
+              <div class="yf-preview" id="yf-preview">Yahoo Finance symbol: —</div>
+            </div>
+            <div class="form-group">
+              <label for="f-rec-date">Recommendation Date</label>
+              <input type="date" id="f-rec-date" />
+              <small id="hist-fetch-status" class="hist-status"></small>
+            </div>
+            <div class="form-group">
+              <label for="f-entry-price">Entry Price (&#8377;) *</label>
+              <input type="number" id="f-entry-price" class="mono-input" placeholder="e.g. 2500" step="0.01" min="0" />
+            </div>
+            <div class="form-group full" id="hist-chip-wrap" style="display:none;">
+              <div id="hist-chip" class="hist-chip">
+                <div id="hist-chip-msg" class="hist-chip-msg"></div>
+                <div class="hist-chip-btns">
+                  <button type="button" class="btn-hist-use" id="hist-use-btn">Use this price &#8595;</button>
+                  <button type="button" class="btn-hist-dismiss" id="hist-dismiss-btn">Keep my entry price</button>
+                </div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="f-target1">Target 1 (&#8377;)</label>
+              <input type="number" id="f-target1" class="mono-input" placeholder="Optional" step="0.01" min="0" />
+            </div>
+            <div class="form-group">
+              <label for="f-target2">Target 2 (&#8377;)</label>
+              <input type="number" id="f-target2" class="mono-input" placeholder="Optional" step="0.01" min="0" />
+            </div>
+            <div class="form-group">
+              <label for="f-target3">Target 3 (&#8377;)</label>
+              <input type="number" id="f-target3" class="mono-input" placeholder="Optional" step="0.01" min="0" />
+            </div>
+            <div class="form-group">
+              <label for="f-stop-loss">Stop Loss (&#8377;)</label>
+              <input type="number" id="f-stop-loss" class="mono-input" placeholder="Optional" step="0.01" min="0" />
+            </div>
+            <div class="form-group">
+              <label for="f-status">Status</label>
+              <select id="f-status">
+                <option value="Active">Active</option>
+                <option value="Watching">Watching</option>
+                <option value="Exited">Exited</option>
+                <option value="Stopped Out">Stopped Out</option>
+              </select>
+            </div>
+            <div class="form-group full">
+              <label for="f-notes">Notes</label>
+              <textarea id="f-notes" placeholder="Optional notes&hellip;"></textarea>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="modal-cancel-btn">Cancel</button>
+        <button class="btn btn-primary" id="modal-save-btn">Save Recommendation</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIRM DIALOG -->
+  <div id="confirm-overlay" class="confirm-overlay" style="display:none;">
+    <div class="confirm-box">
+      <p id="confirm-msg">Are you sure?</p>
+      <div class="confirm-btns">
+        <button class="btn btn-secondary" id="confirm-cancel">Cancel</button>
+        <button class="btn btn-danger" id="confirm-ok">Delete</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────
+  let recommendations = [];
+  let prices = {};        // { "TCS.NS": { price, fetched_at, error } }
+  let editingId = null;
+
+  // ── Helpers ────────────────────────────────────────────────────────────
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const fmt = n => n === null || n === undefined ? '—' : Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtPct = n => n === null || n === undefined ? '—' : (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+  const sign = n => n >= 0 ? '+' : '';
+
+  function isOlderThan24h(isoStr) {
+    if (!isoStr) return false;
+    const d = new Date(isoStr + 'Z');
+    return (Date.now() - d.getTime()) > 86400000;
+  }
+
+  function deriveYfSymbol(ticker, exchange) {
+    const t = (ticker || '').trim().toUpperCase();
+    return exchange === 'BSE' ? `${t}.BO` : `${t}.NS`;
+  }
+
+  function formatTime(isoStr) {
+    if (!isoStr) return '';
+    try {
+      return new Date(isoStr + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    } catch { return isoStr; }
+  }
+
+  // ── Load data ──────────────────────────────────────────────────────────
+  async function loadRecommendations() {
+    const res = await fetch('/api/recommendations');
+    if (!res.ok) throw new Error('Failed to load recommendations');
+    recommendations = await res.json();
+    renderTable();
+    updateStats();
+  }
+
+  // ── Price refresh ──────────────────────────────────────────────────────
+  async function refreshPrices(allTickers = false) {
+    const source = allTickers ? recommendations : recommendations.filter(r => r.status === 'Active' || r.status === 'Watching');
+    const symbols = [...new Set(source.map(r => r.yf_symbol))];
+    if (!symbols.length) return;
+
+    $('price-loading').style.display = 'block';
+    $('refresh-btn').disabled = true;
+    $('refresh-btn').textContent = '⏳ Fetching…';
+
+    try {
+      const res = await fetch('/api/prices?symbols=' + encodeURIComponent(symbols.join(',')));
+      if (!res.ok) throw new Error('Price API error');
+      const data = await res.json();
+      Object.assign(prices, data);
+      $('last-refreshed').textContent = 'Last refreshed: ' + new Date().toLocaleTimeString('en-IN');
+    } catch (e) {
+      console.error('Price fetch failed:', e);
+    } finally {
+      $('price-loading').style.display = 'none';
+      $('refresh-btn').disabled = false;
+      $('refresh-btn').textContent = '⟳ Refresh Prices';
+      renderTable();
+      updateStats();
+    }
+  }
+
+  // ── Stats ──────────────────────────────────────────────────────────────
+  function updateStats() {
+    $('stat-total').textContent  = recommendations.length;
+    $('stat-active').textContent = recommendations.filter(r => r.status === 'Active').length;
+
+    let t1Hit = 0, slHit = 0;
+    recommendations.forEach(r => {
+      const pd = prices[r.yf_symbol];
+      const p = pd?.price;
+      if (p == null) return;
+      if (r.target1 && p >= r.target1) t1Hit++;
+      if (r.stop_loss && p <= r.stop_loss) slHit++;
+    });
+    $('stat-t1').textContent = t1Hit;
+    $('stat-sl').textContent = slHit;
+  }
+
+  // ── Render table ───────────────────────────────────────────────────────
+  function renderTable() {
+    const tbody = $('stocks-tbody');
+
+    if (!recommendations.length) {
+      tbody.innerHTML = `<tr><td colspan="14" style="padding:60px 0;text-align:center;color:var(--text-muted);">No recommendations yet. Click <strong>+ Add Stock</strong> to get started.</td></tr>`;
+      return;
+    }
+
+    const sorted = [...recommendations].sort((a, b) => {
+      const order = { Active: 0, Watching: 1, Exited: 2, 'Stopped Out': 3 };
+      const oa = order[a.status] ?? 9, ob = order[b.status] ?? 9;
+      if (oa !== ob) return oa - ob;
+      return (b.rec_date || '').localeCompare(a.rec_date || '');
+    });
+
+    tbody.innerHTML = sorted.map(rec => buildRow(rec)).join('');
+
+    tbody.querySelectorAll('.btn-edit').forEach(btn => {
+      btn.addEventListener('click', () => openEditModal(parseInt(btn.dataset.id)));
+    });
+    tbody.querySelectorAll('.btn-delete').forEach(btn => {
+      btn.addEventListener('click', () => confirmDelete(parseInt(btn.dataset.id)));
+    });
+  }
+
+  function buildRow(rec) {
+    const pd = prices[rec.yf_symbol];
+    const p = pd ? pd.price : undefined;
+    const hasPrice = p !== null && p !== undefined;
+
+    // Computed
+    const gainRs  = hasPrice ? p - rec.entry_price : null;
+    const gainPct = hasPrice ? ((p - rec.entry_price) / rec.entry_price) * 100 : null;
+
+    const t1Hit = hasPrice && rec.target1 && p >= rec.target1;
+    const t2Hit = hasPrice && rec.target2 && p >= rec.target2;
+    const t3Hit = hasPrice && rec.target3 && p >= rec.target3;
+    const slHit = hasPrice && rec.stop_loss && p <= rec.stop_loss;
+    const nearSL = hasPrice && rec.stop_loss && !slHit && ((p - rec.stop_loss) / p) <= 0.03;
+
+    const remaining = [
+      rec.target1 && !t1Hit ? rec.target1 : null,
+      rec.target2 && !t2Hit ? rec.target2 : null,
+      rec.target3 && !t3Hit ? rec.target3 : null,
+    ].filter(t => t !== null);
+    const nextTgt = remaining.length ? Math.min(...remaining) : null;
+
+    const distRs  = nextTgt && hasPrice ? nextTgt - p : null;
+    const distPct = nextTgt && hasPrice ? ((nextTgt - p) / p) * 100 : null;
+
+    // Price cell
+    let priceCell;
+    if (!pd) {
+      priceCell = `<span class="muted" style="font-family:var(--mono)">Fetching…</span>`;
+    } else if (pd.error) {
+      priceCell = `<span class="error-badge" title="${esc(pd.error)}">⚠ Fetch Error</span>`;
+    } else if (!hasPrice) {
+      priceCell = `<span class="muted">No data</span>`;
+    } else {
+      const old = isOlderThan24h(pd.fetched_at) ? ` <span class="fetch-warn" title="Price data may be stale (>24h old)">⚠️</span>` : '';
+      const cls = nearSL ? 'amber' : '';
+      priceCell = `<span class="mono ${cls}">&#8377;${fmt(p)}</span>${old}`;
+    }
+
+    // Gain/loss cells — use proper minus sign for negative amounts
+    const glRsCell = gainRs !== null
+      ? `<span class="mono ${gainRs >= 0 ? 'green' : 'red'}">${gainRs >= 0 ? '+' : '&#8722;'}&#8377;${fmt(Math.abs(gainRs))}</span>`
+      : `<span class="muted">—</span>`;
+
+    const glPctCell = gainPct !== null
+      ? `<span class="mono ${gainPct >= 0 ? 'green' : 'red'}">${fmtPct(gainPct)}</span>`
+      : `<span class="muted">—</span>`;
+
+    // Target badges — "No targets" pill when none are set
+    const hasAnyTarget = rec.target1 || rec.target2 || rec.target3;
+    const targetBadges = hasAnyTarget
+      ? [
+          rec.target1 ? `<span class="badge ${t1Hit ? 'badge-green' : 'badge-outline'}" title="T1: &#8377;${rec.target1}">T1</span>` : '',
+          rec.target2 ? `<span class="badge ${t2Hit ? 'badge-green' : 'badge-outline'}" title="T2: &#8377;${rec.target2}">T2</span>` : '',
+          rec.target3 ? `<span class="badge ${t3Hit ? 'badge-green' : 'badge-outline'}" title="T3: &#8377;${rec.target3}">T3</span>` : '',
+        ].filter(Boolean).join(' ')
+      : `<span class="badge-no-target">No targets</span>`;
+
+    // SL badge
+    const slBadge = rec.stop_loss
+      ? `<span class="badge ${slHit ? 'badge-red' : 'badge-outline-red'}" title="SL: &#8377;${rec.stop_loss}">SL</span>`
+      : `<span class="muted">—</span>`;
+
+    // Next target cell
+    let nextTgtCell = `<span class="muted">—</span>`;
+    if (nextTgt) {
+      if (hasPrice && distRs !== null) {
+        nextTgtCell = `<span class="mono">&#8377;${fmt(nextTgt)}</span><br><small class="${distRs >= 0 ? 'green' : 'red'}" style="font-family:var(--mono)">${sign(distRs)}&#8377;${fmt(Math.abs(distRs))} (${distPct !== null ? fmtPct(distPct) : '—'})</small>`;
+      } else {
+        nextTgtCell = `<span class="mono muted">&#8377;${fmt(nextTgt)}</span>`;
+      }
+    }
+
+    // Status
+    const statusMap = { Active: 'status-active', Watching: 'status-watching', Exited: 'status-exited', 'Stopped Out': 'status-stopped' };
+    const statusCls = statusMap[rec.status] || '';
+
+    return `
+      <tr data-id="${rec.id}">
+        <td><span class="stock-name">${esc(rec.stock_name)}</span></td>
+        <td><span class="ticker-cell">${esc(rec.ticker)}</span></td>
+        <td style="color:var(--text-muted)">${esc(rec.exchange)}</td>
+        <td style="font-family:var(--mono);font-size:12px;color:var(--text-muted)">${rec.rec_date || '—'}</td>
+        <td><span class="mono">&#8377;${fmt(rec.entry_price)}</span></td>
+        <td>${priceCell}</td>
+        <td>${glRsCell}</td>
+        <td>${glPctCell}</td>
+        <td style="white-space:nowrap">${targetBadges}</td>
+        <td>${slBadge}</td>
+        <td>${nextTgtCell}</td>
+        <td><span class="status-badge ${statusCls}">${esc(rec.status)}</span></td>
+        <td class="notes-cell" title="${esc(rec.notes || '')}">${rec.notes ? esc(rec.notes) : '<span class="muted">—</span>'}</td>
+        <td class="actions-cell">
+          <button class="btn btn-edit-sm btn-edit" data-id="${rec.id}">Edit</button>
+          <button class="btn btn-danger btn-delete" data-id="${rec.id}">Delete</button>
+        </td>
+      </tr>`;
+  }
+
+  // ── Modal ──────────────────────────────────────────────────────────────
+  function openAddModal() {
+    editingId = null;
+    $('modal-title').textContent = 'Add Stock Recommendation';
+    clearForm();
+    $('form-error').style.display = 'none';
+    $('modal-overlay').style.display = 'flex';
+    $('f-stock-name').focus();
+  }
+
+  function openEditModal(id) {
+    const rec = recommendations.find(r => r.id === id);
+    if (!rec) return;
+    editingId = id;
+    $('modal-title').textContent = 'Edit Recommendation';
+    $('form-error').style.display = 'none';
+
+    $('f-stock-name').value  = rec.stock_name || '';
+    $('f-ticker').value      = rec.ticker || '';
+    $('f-exchange').value    = rec.exchange || 'NSE';
+    $('f-rec-date').value    = rec.rec_date || '';
+    $('f-entry-price').value = rec.entry_price || '';
+    $('f-target1').value     = rec.target1 || '';
+    $('f-target2').value     = rec.target2 || '';
+    $('f-target3').value     = rec.target3 || '';
+    $('f-stop-loss').value   = rec.stop_loss || '';
+    $('f-status').value      = rec.status || 'Active';
+    $('f-notes').value       = rec.notes || '';
+
+    updateYfPreview();
+    $('modal-overlay').style.display = 'flex';
+    $('f-stock-name').focus();
+  }
+
+  function closeModal() {
+    $('modal-overlay').style.display = 'none';
+    editingId = null;
+  }
+
+  function clearForm() {
+    ['f-stock-name','f-ticker','f-rec-date','f-entry-price','f-target1','f-target2','f-target3','f-stop-loss','f-notes']
+      .forEach(id => $(id).value = '');
+    $('f-exchange').value = 'NSE';
+    $('f-status').value = 'Active';
+    hideHistChip();
+    showHistStatus('');
+    updateYfPreview();
+  }
+
+  function updateYfPreview() {
+    const ticker = $('f-ticker').value.trim().toUpperCase();
+    const exchange = $('f-exchange').value;
+    const sym = ticker ? deriveYfSymbol(ticker, exchange) : '—';
+    $('yf-preview').textContent = 'Yahoo Finance symbol: ' + sym;
+  }
+
+  // ── Autocomplete ────────────────────────────────────────────────────────
+  const acTimers = {};
+
+  function acPosition(dd, inputEl) {
+    const r = inputEl.getBoundingClientRect();
+    dd.style.left  = r.left + 'px';
+    dd.style.top   = (r.bottom + 1) + 'px';
+    dd.style.width = r.width + 'px';
+  }
+
+  function acHide(dd) {
+    dd.style.display = 'none';
+    dd.innerHTML = '';
+  }
+
+  function acFill(item) {
+    $('f-stock-name').value = item.name;
+    $('f-ticker').value     = item.ticker;
+    $('f-exchange').value   = item.exchange;
+    updateYfPreview();
+  }
+
+  async function acFetch(q) {
+    try {
+      const r = await fetch('/api/search_stocks?q=' + encodeURIComponent(q));
+      return r.ok ? await r.json() : [];
+    } catch { return []; }
+  }
+
+  function setupAc(inputEl, dd) {
+    let results = [], idx = -1;
+
+    function render(items, loading) {
+      acPosition(dd, inputEl);
+      dd.style.display = 'block';
+      idx = -1;
+
+      if (loading) {
+        dd.innerHTML = '<div class="ac-status">Searching…</div>';
+        return;
+      }
+      if (!items.length) {
+        dd.innerHTML = '<div class="ac-status">No results found</div>';
+        results = [];
+        return;
+      }
+      results = items;
+      dd.innerHTML = items.map((it, i) =>
+        `<div class="ac-item" data-i="${i}">
+           <span class="ac-ticker">${esc(it.ticker)}</span>
+           <span class="ac-name">${esc(it.name)}</span>
+           <span class="ac-exchange">${esc(it.exchange_display)}</span>
+         </div>`
+      ).join('');
+
+      dd.querySelectorAll('.ac-item').forEach(el => {
+        el.addEventListener('mousedown', e => {
+          e.preventDefault();
+          acFill(results[parseInt(el.dataset.i)]);
+          acHide(dd);
+        });
+        el.addEventListener('mouseover', () => {
+          dd.querySelectorAll('.ac-item').forEach(x => x.classList.remove('highlighted'));
+          el.classList.add('highlighted');
+          idx = parseInt(el.dataset.i);
+        });
+      });
+    }
+
+    inputEl.addEventListener('input', () => {
+      clearTimeout(acTimers[inputEl.id]);
+      const q = inputEl.value.trim();
+      if (q.length < 2) { acHide(dd); return; }
+      render([], true);
+      acTimers[inputEl.id] = setTimeout(async () => {
+        const items = await acFetch(q);
+        if (dd.style.display !== 'none') render(items, false);
+      }, 350);
+    });
+
+    inputEl.addEventListener('keydown', e => {
+      if (dd.style.display === 'none') return;
+      const items = dd.querySelectorAll('.ac-item');
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        idx = Math.min(idx + 1, items.length - 1);
+        items.forEach((el, i) => el.classList.toggle('highlighted', i === idx));
+        if (items[idx]) items[idx].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        idx = Math.max(idx - 1, -1);
+        items.forEach((el, i) => el.classList.toggle('highlighted', i === idx));
+        if (idx >= 0 && items[idx]) items[idx].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (idx >= 0 && results[idx]) acFill(results[idx]);
+        acHide(dd);
+      } else if (e.key === 'Escape') {
+        acHide(dd);
+      }
+    });
+
+    inputEl.addEventListener('blur', () => setTimeout(() => acHide(dd), 160));
+    inputEl.addEventListener('focus', () => {
+      if (inputEl.value.trim().length >= 2 && results.length) {
+        acPosition(dd, inputEl);
+        dd.style.display = 'block';
+      }
+    });
+  }
+
+  // ── Historical Price Fetch ─────────────────────────────────────────────
+  let histFetchTimer = null;
+  let histFetchedPrice = null;
+
+  function showHistStatus(msg) {
+    $('hist-fetch-status').textContent = msg;
+  }
+
+  function hideHistChip() {
+    $('hist-chip-wrap').style.display = 'none';
+    $('hist-chip').classList.remove('error');
+    $('hist-use-btn').style.display = '';
+    histFetchedPrice = null;
+  }
+
+  function showHistChip(price, actualDate, selectedDate, exchange) {
+    const chip   = $('hist-chip');
+    const msgEl  = $('hist-chip-msg');
+    const wrap   = $('hist-chip-wrap');
+
+    if (!price) {
+      chip.classList.add('error');
+      msgEl.innerHTML = 'Could not fetch historical price. Please enter manually.';
+      $('hist-use-btn').style.display = 'none';
+      $('hist-dismiss-btn').textContent = 'Dismiss';
+      wrap.style.display = 'block';
+      histFetchedPrice = null;
+      return;
+    }
+
+    chip.classList.remove('error');
+    histFetchedPrice = price;
+    $('hist-use-btn').style.display = '';
+    $('hist-dismiss-btn').textContent = 'Keep my entry price';
+
+    const fmtDate = d => new Date(d + 'T00:00:00').toLocaleDateString('en-IN',
+      { day: '2-digit', month: 'short', year: 'numeric' });
+    const priceStr = '&#8377;' + Number(price).toLocaleString('en-IN',
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    if (actualDate !== selectedDate) {
+      msgEl.innerHTML = `&#128197; Market was closed on ${fmtDate(selectedDate)}. Using closing price from <strong>${fmtDate(actualDate)}</strong> instead: <strong>${priceStr}</strong>`;
+    } else {
+      msgEl.innerHTML = `&#128197; ${esc(exchange)} closing price on ${fmtDate(selectedDate)}: <strong>${priceStr}</strong>`;
+    }
+    wrap.style.display = 'block';
+  }
+
+  async function maybeHistFetch() {
+    clearTimeout(histFetchTimer);
+    hideHistChip();
+    showHistStatus('');
+
+    const dateVal  = $('f-rec-date').value;
+    const ticker   = $('f-ticker').value.trim();
+    const exchange = $('f-exchange').value;
+
+    if (!dateVal) return;
+
+    const today = new Date().toISOString().slice(0, 10);
+    if (dateVal >= today) return;
+
+    if (!ticker) {
+      showHistStatus('Enter ticker symbol first to fetch historical price');
+      return;
+    }
+
+    const sym        = deriveYfSymbol(ticker, exchange);
+    const dateDisplay = new Date(dateVal + 'T00:00:00').toLocaleDateString('en-IN',
+      { day: '2-digit', month: 'short', year: 'numeric' });
+    showHistStatus(`🔍 Fetching closing price for ${dateDisplay}…`);
+
+    histFetchTimer = setTimeout(async () => {
+      try {
+        const res  = await fetch(`/api/historical_price?symbol=${encodeURIComponent(sym)}&date=${encodeURIComponent(dateVal)}`);
+        const data = await res.json();
+        showHistStatus('');
+        if (data.error && !data.price) {
+          showHistChip(null, null, dateVal, exchange);
+        } else {
+          showHistChip(data.price, data.actual_date, dateVal, exchange);
+        }
+      } catch {
+        showHistStatus('');
+        showHistChip(null, null, dateVal, exchange);
+      }
+    }, 400);
+  }
+
+  async function saveForm() {
+    const stockName = $('f-stock-name').value.trim();
+    const ticker    = $('f-ticker').value.trim().toUpperCase();
+    const exchange  = $('f-exchange').value;
+    const entryPrice = $('f-entry-price').value;
+    const errEl = $('form-error');
+
+    if (!stockName || !ticker || !exchange || !entryPrice) {
+      errEl.textContent = 'Stock name, ticker, exchange, and entry price are required.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    const payload = {
+      stock_name:  stockName,
+      ticker:      ticker,
+      exchange:    exchange,
+      rec_date:    $('f-rec-date').value || null,
+      entry_price: parseFloat(entryPrice),
+      target1:     $('f-target1').value  ? parseFloat($('f-target1').value)  : null,
+      target2:     $('f-target2').value  ? parseFloat($('f-target2').value)  : null,
+      target3:     $('f-target3').value  ? parseFloat($('f-target3').value)  : null,
+      stop_loss:   $('f-stop-loss').value ? parseFloat($('f-stop-loss').value) : null,
+      status:      $('f-status').value,
+      notes:       $('f-notes').value.trim() || null,
+    };
+
+    try {
+      const url    = editingId ? `/api/recommendations/${editingId}` : '/api/recommendations';
+      const method = editingId ? 'PUT' : 'POST';
+      const res    = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const data   = await res.json();
+
+      if (!res.ok) {
+        errEl.textContent = data.error || 'Save failed.';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      if (editingId) {
+        recommendations = recommendations.map(r => r.id === editingId ? data : r);
+      } else {
+        recommendations.push(data);
+      }
+
+      closeModal();
+      renderTable();
+      updateStats();
+
+      // Fetch price for the new/updated symbol
+      const sym = data.yf_symbol;
+      if (!prices[sym]) {
+        fetch('/api/prices?symbols=' + encodeURIComponent(sym))
+          .then(r => r.json())
+          .then(d => { Object.assign(prices, d); renderTable(); updateStats(); })
+          .catch(() => {});
+      }
+    } catch (e) {
+      errEl.textContent = 'Network error: ' + e.message;
+      errEl.style.display = 'block';
+    }
+  }
+
+  // ── Delete confirm ─────────────────────────────────────────────────────
+  function confirmDelete(id) {
+    const rec = recommendations.find(r => r.id === id);
+    if (!rec) return;
+    $('confirm-msg').textContent = `Delete "${rec.stock_name}"? This cannot be undone.`;
+    $('confirm-overlay').style.display = 'flex';
+
+    $('confirm-ok').onclick = async () => {
+      $('confirm-overlay').style.display = 'none';
+      try {
+        const res = await fetch(`/api/recommendations/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+          recommendations = recommendations.filter(r => r.id !== id);
+          renderTable();
+          updateStats();
+        }
+      } catch (e) { console.error('Delete failed:', e); }
+    };
+    $('confirm-cancel').onclick = () => { $('confirm-overlay').style.display = 'none'; };
+  }
+
+  // ── Event listeners ────────────────────────────────────────────────────
+  $('add-btn').addEventListener('click', openAddModal);
+  $('modal-close-btn').addEventListener('click', closeModal);
+  $('modal-cancel-btn').addEventListener('click', closeModal);
+  $('modal-save-btn').addEventListener('click', saveForm);
+  $('refresh-btn').addEventListener('click', () => refreshPrices(true));
+
+  $('modal-overlay').addEventListener('click', e => {
+    if (e.target === $('modal-overlay')) closeModal();
+  });
+
+  $('f-ticker').addEventListener('input', updateYfPreview);
+  $('f-ticker').addEventListener('input', maybeHistFetch);
+  $('f-exchange').addEventListener('change', updateYfPreview);
+  $('f-exchange').addEventListener('change', maybeHistFetch);
+  $('f-rec-date').addEventListener('change', maybeHistFetch);
+
+  $('hist-use-btn').addEventListener('click', () => {
+    if (histFetchedPrice !== null) $('f-entry-price').value = histFetchedPrice;
+    hideHistChip();
+    showHistStatus('');
+  });
+  $('hist-dismiss-btn').addEventListener('click', () => {
+    hideHistChip();
+    showHistStatus('');
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if ($('modal-overlay').style.display !== 'none') closeModal();
+      if ($('confirm-overlay').style.display !== 'none') $('confirm-overlay').style.display = 'none';
+    }
+    if (e.key === 'Enter' && $('modal-overlay').style.display !== 'none' && e.target.tagName !== 'TEXTAREA') {
+      const anyAcOpen = $('ac-dd-name').style.display !== 'none' || $('ac-dd-ticker').style.display !== 'none';
+      if (!anyAcOpen) saveForm();
+    }
+  });
+
+  // Wire autocomplete on both inputs
+  setupAc($('f-stock-name'), $('ac-dd-name'));
+  setupAc($('f-ticker'), $('ac-dd-ticker'));
+
+  // Hide dropdowns and hist chip when modal closes
+  const _origCloseModal = closeModal;
+  closeModal = () => {
+    acHide($('ac-dd-name'));
+    acHide($('ac-dd-ticker'));
+    hideHistChip();
+    showHistStatus('');
+    clearTimeout(histFetchTimer);
+    _origCloseModal();
+  };
+
+  // ── Boot ───────────────────────────────────────────────────────────────
+  (async () => {
+    try {
+      await loadRecommendations();
+      refreshPrices(false);
+    } catch (e) {
+      $('stocks-tbody').innerHTML = `<tr><td colspan="14" style="padding:40px;text-align:center;color:var(--red);">Failed to load: ${esc(e.message)}</td></tr>`;
+    }
+  })();
+</script>
+</body>
+</html>
+
