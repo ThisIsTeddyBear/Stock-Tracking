@@ -14,6 +14,33 @@ def derive_yf_symbol(ticker: str, exchange: str) -> str:
     return f"{t}.NS"
 
 
+def normalize_tab_name(raw_name) -> str:
+    name = (raw_name or "").strip()
+    if not name:
+        raise ValueError("Tab name is required")
+    if len(name) > 60:
+        raise ValueError("Tab name must be 60 characters or less")
+    return name
+
+
+def resolve_watchlist_id(raw_watchlist_id=None) -> int:
+    tabs = db.get_tabs()
+    if not tabs:
+        raise ValueError("No tabs available")
+
+    if raw_watchlist_id is None or raw_watchlist_id == "":
+        return tabs[0]["id"]
+
+    try:
+        watchlist_id = int(raw_watchlist_id)
+    except (TypeError, ValueError):
+        raise ValueError("watchlist_id must be a valid integer")
+
+    if not db.get_tab(watchlist_id):
+        raise ValueError("Tab not found")
+    return watchlist_id
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -22,7 +49,14 @@ def index():
 @app.route("/api/recommendations", methods=["GET"])
 def get_recommendations():
     try:
-        return jsonify(db.get_all())
+        raw_watchlist_id = request.args.get("watchlist_id")
+        if raw_watchlist_id is None:
+            return jsonify(db.get_all())
+
+        watchlist_id = resolve_watchlist_id(raw_watchlist_id)
+        return jsonify(db.get_all(watchlist_id=watchlist_id))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
@@ -39,11 +73,19 @@ def create_recommendation():
         if missing:
             return jsonify({"error": f"Missing required fields: {', '.join(missing)}"}), 400
 
+        watchlist_id = resolve_watchlist_id(data.get("watchlist_id"))
+        ticker = data["ticker"].strip().upper()
+        exchange = data["exchange"].strip().upper()
+
+        if db.stock_exists_in_tab(watchlist_id, ticker, exchange):
+            return jsonify({"error": "This stock already exists in the selected tab"}), 409
+
         record = {
             "stock_name": data["stock_name"].strip(),
-            "ticker": data["ticker"].strip().upper(),
-            "exchange": data["exchange"].strip().upper(),
-            "yf_symbol": derive_yf_symbol(data["ticker"], data["exchange"]),
+            "ticker": ticker,
+            "exchange": exchange,
+            "yf_symbol": derive_yf_symbol(ticker, exchange),
+            "watchlist_id": watchlist_id,
             "rec_date": data.get("rec_date") or None,
             "entry_price": float(data["entry_price"]),
             "target1": float(data["target1"]) if data.get("target1") else None,
@@ -57,7 +99,9 @@ def create_recommendation():
         new_rec = db.insert(record)
         return jsonify(new_rec), 201
 
-    except (ValueError, TypeError) as exc:
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except TypeError as exc:
         return jsonify({"error": f"Invalid data: {exc}"}), 400
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
@@ -81,6 +125,22 @@ def update_recommendation(rec_id):
         data["exchange"] = exchange.strip().upper()
         data["yf_symbol"] = derive_yf_symbol(ticker, exchange)
 
+        if "stock_name" in data and data["stock_name"] is not None:
+            data["stock_name"] = data["stock_name"].strip()
+
+        if "watchlist_id" in data:
+            data["watchlist_id"] = resolve_watchlist_id(data.get("watchlist_id"))
+        else:
+            data["watchlist_id"] = existing["watchlist_id"]
+
+        if db.stock_exists_in_tab(
+            data["watchlist_id"],
+            data["ticker"],
+            data["exchange"],
+            exclude_rec_id=rec_id,
+        ):
+            return jsonify({"error": "This stock already exists in the selected tab"}), 409
+
         for field in ["entry_price", "target1", "target2", "target3", "stop_loss"]:
             if field in data and data[field] is not None and data[field] != "":
                 data[field] = float(data[field])
@@ -90,7 +150,9 @@ def update_recommendation(rec_id):
         updated = db.update(rec_id, data)
         return jsonify(updated)
 
-    except (ValueError, TypeError) as exc:
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except TypeError as exc:
         return jsonify({"error": f"Invalid data: {exc}"}), 400
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
@@ -102,8 +164,97 @@ def delete_recommendation(rec_id):
         existing = db.get_by_id(rec_id)
         if not existing:
             return jsonify({"error": "Recommendation not found"}), 404
+
+        raw_watchlist_id = request.args.get("watchlist_id")
+        if raw_watchlist_id is not None:
+            watchlist_id = resolve_watchlist_id(raw_watchlist_id)
+            if existing["watchlist_id"] != watchlist_id:
+                return jsonify({"error": "Recommendation not found in selected tab"}), 404
+
         db.delete(rec_id)
         return jsonify({"success": True})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/watchlists", methods=["GET"])
+def list_watchlists():
+    try:
+        tabs = db.get_tabs()
+        include_stocks = request.args.get("include_stocks") in {"1", "true", "True"}
+        if not include_stocks:
+            return jsonify(tabs)
+
+        by_tab = {}
+        for rec in db.get_all():
+            by_tab.setdefault(rec["watchlist_id"], []).append(rec)
+
+        enriched = []
+        for tab in tabs:
+            row = dict(tab)
+            row["stocks"] = by_tab.get(tab["id"], [])
+            enriched.append(row)
+        return jsonify(enriched)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/watchlists", methods=["POST"])
+def create_watchlist():
+    try:
+        data = request.get_json(force=True)
+        if not data:
+            return jsonify({"error": "Request body must be JSON"}), 400
+
+        name = normalize_tab_name(data.get("name"))
+        if db.find_tab_by_name(name):
+            return jsonify({"error": "A tab with this name already exists"}), 409
+
+        tab = db.create_tab(name)
+        return jsonify(tab), 201
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/watchlists/<int:tab_id>", methods=["PUT"])
+def rename_watchlist(tab_id):
+    try:
+        existing = db.get_tab(tab_id)
+        if not existing:
+            return jsonify({"error": "Tab not found"}), 404
+
+        data = request.get_json(force=True)
+        if not data:
+            return jsonify({"error": "Request body must be JSON"}), 400
+
+        name = normalize_tab_name(data.get("name"))
+        dup = db.find_tab_by_name(name)
+        if dup and dup["id"] != tab_id:
+            return jsonify({"error": "A tab with this name already exists"}), 409
+
+        tab = db.rename_tab(tab_id, name)
+        return jsonify(tab)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/watchlists/<int:tab_id>", methods=["DELETE"])
+def delete_watchlist(tab_id):
+    try:
+        existing = db.get_tab(tab_id)
+        if not existing:
+            return jsonify({"error": "Tab not found"}), 404
+
+        next_tab_id = db.delete_tab(tab_id)
+        return jsonify({"success": True, "deleted_tab_id": tab_id, "next_tab_id": next_tab_id})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 

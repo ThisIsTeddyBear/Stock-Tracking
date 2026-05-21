@@ -105,6 +105,77 @@
       border-bottom: 1px solid #5a4a0a;
     }
 
+    .tabs-shell {
+      padding: 14px 24px 0;
+    }
+    .tabs-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+    .tabs-list {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      flex: 1;
+      min-width: 260px;
+    }
+    .tab-btn {
+      border: 1px solid var(--border2);
+      background: var(--surface2);
+      color: var(--text-muted);
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: var(--sans);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+    .tab-btn:hover {
+      border-color: #4b5670;
+      color: var(--text);
+    }
+    .tab-btn.active {
+      border-color: #2d7cd1;
+      background: var(--accent-bg);
+      color: var(--accent);
+    }
+    .tab-count {
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      color: var(--text-muted);
+    }
+    .tab-btn.active .tab-count {
+      background: rgba(88,166,255,0.2);
+      color: var(--accent);
+    }
+    .tab-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .tab-actions .btn {
+      padding: 6px 11px;
+      font-size: 12px;
+    }
+    .tab-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 8px;
+      min-height: 18px;
+    }
+
     /* ── STATS BAR ── */
     .stats-bar {
       display: flex;
@@ -427,6 +498,16 @@
       font-family: var(--sans);
     }
     .btn-hist-dismiss:hover { color: var(--text); }
+
+    @media (max-width: 900px) {
+      .tabs-row {
+        align-items: flex-start;
+      }
+      .tab-actions {
+        width: 100%;
+        justify-content: flex-start;
+      }
+    }
   </style>
 </head>
 <body>
@@ -446,6 +527,19 @@
 
   <!-- LOADING BAR -->
   <div id="price-loading" style="display:none;">Fetching latest prices&hellip;</div>
+
+  <!-- TABS -->
+  <div class="tabs-shell">
+    <div class="tabs-row">
+      <div id="tabs-list" class="tabs-list"></div>
+      <div class="tab-actions">
+        <button class="btn btn-secondary" id="new-tab-btn">+ New Tab</button>
+        <button class="btn btn-secondary" id="rename-tab-btn">Rename Tab</button>
+        <button class="btn btn-secondary" id="delete-tab-btn">Delete Tab</button>
+      </div>
+    </div>
+    <div id="tab-meta" class="tab-meta"></div>
+  </div>
 
   <!-- STATS BAR -->
   <div class="stats-bar">
@@ -603,9 +697,14 @@
 
 <script>
   // ── State ──────────────────────────────────────────────────────────────
+  let stockTabs = [];
+  let activeTabId = null;
   let recommendations = [];
   let prices = {};        // { "TCS.NS": { price, fetched_at, error } }
   let editingId = null;
+  const ACTIVE_TAB_STORAGE_KEY = 'stock_tracking_active_tab_id';
+  const PRICE_CACHE_STORAGE_KEY = 'stock_tracking_price_cache_v1';
+  const PRICE_CACHE_TTL_MS = 15 * 60 * 1000;
 
   // ── Helpers ────────────────────────────────────────────────────────────
   const $ = id => document.getElementById(id);
@@ -620,6 +719,13 @@
     return (Date.now() - d.getTime()) > 86400000;
   }
 
+  function isOlderThanMs(isoStr, maxAgeMs) {
+    if (!isoStr) return true;
+    const d = new Date(isoStr + 'Z');
+    if (Number.isNaN(d.getTime())) return true;
+    return (Date.now() - d.getTime()) > maxAgeMs;
+  }
+
   function deriveYfSymbol(ticker, exchange) {
     const t = (ticker || '').trim().toUpperCase();
     return exchange === 'BSE' ? `${t}.BO` : `${t}.NS`;
@@ -632,30 +738,142 @@
     } catch { return isoStr; }
   }
 
+  function normalizeTabName(raw) {
+    const name = String(raw || '').trim();
+    if (!name) return '';
+    return name.slice(0, 60);
+  }
+
+  function getActiveTab() {
+    return stockTabs.find(t => t.id === activeTabId) || null;
+  }
+
+  function getActiveRecommendations() {
+    if (!activeTabId) return [];
+    return recommendations.filter(r => r.watchlist_id === activeTabId);
+  }
+
+  function persistActiveTab() {
+    if (activeTabId) {
+      localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, String(activeTabId));
+    }
+  }
+
+  function setActiveTab(tabId, persist = true) {
+    if (!stockTabs.some(t => t.id === tabId)) return false;
+    activeTabId = tabId;
+    if (persist) persistActiveTab();
+    return true;
+  }
+
+  function loadCachedPrices() {
+    try {
+      const raw = localStorage.getItem(PRICE_CACHE_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        prices = parsed;
+      }
+    } catch {}
+  }
+
+  function persistPriceCache() {
+    try {
+      localStorage.setItem(PRICE_CACHE_STORAGE_KEY, JSON.stringify(prices));
+    } catch {}
+  }
+
   // ── Load data ──────────────────────────────────────────────────────────
   async function loadRecommendations() {
     const res = await fetch('/api/recommendations');
     if (!res.ok) throw new Error('Failed to load recommendations');
     recommendations = await res.json();
-    renderTable();
-    updateStats();
+  }
+
+  async function loadTabs() {
+    const res = await fetch('/api/watchlists');
+    if (!res.ok) throw new Error('Failed to load tabs');
+    stockTabs = await res.json();
+  }
+
+  function renderTabs() {
+    const tabsList = $('tabs-list');
+    const renameBtn = $('rename-tab-btn');
+    const deleteBtn = $('delete-tab-btn');
+
+    if (!stockTabs.length) {
+      tabsList.innerHTML = '<span class="muted">No tabs available</span>';
+      $('tab-meta').textContent = '';
+      renameBtn.disabled = true;
+      deleteBtn.disabled = true;
+      return;
+    }
+
+    if (!getActiveTab()) {
+      activeTabId = stockTabs[0].id;
+      persistActiveTab();
+    }
+
+    const counts = {};
+    recommendations.forEach(r => {
+      counts[r.watchlist_id] = (counts[r.watchlist_id] || 0) + 1;
+    });
+
+    tabsList.innerHTML = stockTabs.map(tab => `
+      <button class="tab-btn ${tab.id === activeTabId ? 'active' : ''}" data-tab-id="${tab.id}">
+        <span>${esc(tab.name)}</span>
+        <span class="tab-count">${counts[tab.id] || 0}</span>
+      </button>
+    `).join('');
+
+    tabsList.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const tabId = parseInt(btn.dataset.tabId);
+        if (!setActiveTab(tabId, true)) return;
+        renderTabs();
+        renderTable();
+        updateStats();
+        await refreshPrices(false);
+      });
+    });
+
+    const activeTab = getActiveTab();
+    const activeCount = counts[activeTab.id] || 0;
+    $('tab-meta').textContent = `${activeCount} stock${activeCount === 1 ? '' : 's'} in ${activeTab.name}`;
+    renameBtn.disabled = false;
+    deleteBtn.disabled = stockTabs.length <= 1;
   }
 
   // ── Price refresh ──────────────────────────────────────────────────────
   async function refreshPrices(allTickers = false) {
-    const source = allTickers ? recommendations : recommendations.filter(r => r.status === 'Active' || r.status === 'Watching');
+    const scoped = getActiveRecommendations();
+    const source = allTickers ? scoped : scoped.filter(r => r.status === 'Active' || r.status === 'Watching');
     const symbols = [...new Set(source.map(r => r.yf_symbol))];
     if (!symbols.length) return;
+    const symbolsToFetch = allTickers
+      ? symbols
+      : symbols.filter(symbol => {
+          const cached = prices[symbol];
+          if (!cached) return true;
+          return isOlderThanMs(cached.fetched_at, PRICE_CACHE_TTL_MS);
+        });
+
+    if (!symbolsToFetch.length) {
+      renderTable();
+      updateStats();
+      return;
+    }
 
     $('price-loading').style.display = 'block';
     $('refresh-btn').disabled = true;
     $('refresh-btn').textContent = '⏳ Fetching…';
 
     try {
-      const res = await fetch('/api/prices?symbols=' + encodeURIComponent(symbols.join(',')));
+      const res = await fetch('/api/prices?symbols=' + encodeURIComponent(symbolsToFetch.join(',')));
       if (!res.ok) throw new Error('Price API error');
       const data = await res.json();
       Object.assign(prices, data);
+      persistPriceCache();
       $('last-refreshed').textContent = 'Last refreshed: ' + new Date().toLocaleTimeString('en-IN');
     } catch (e) {
       console.error('Price fetch failed:', e);
@@ -670,11 +888,12 @@
 
   // ── Stats ──────────────────────────────────────────────────────────────
   function updateStats() {
-    $('stat-total').textContent  = recommendations.length;
-    $('stat-active').textContent = recommendations.filter(r => r.status === 'Active').length;
+    const scoped = getActiveRecommendations();
+    $('stat-total').textContent  = scoped.length;
+    $('stat-active').textContent = scoped.filter(r => r.status === 'Active').length;
 
     let t1Hit = 0, slHit = 0;
-    recommendations.forEach(r => {
+    scoped.forEach(r => {
       const pd = prices[r.yf_symbol];
       const p = pd?.price;
       if (p == null) return;
@@ -688,13 +907,20 @@
   // ── Render table ───────────────────────────────────────────────────────
   function renderTable() {
     const tbody = $('stocks-tbody');
+    const activeTab = getActiveTab();
+    const scoped = getActiveRecommendations();
 
-    if (!recommendations.length) {
-      tbody.innerHTML = `<tr><td colspan="14" style="padding:60px 0;text-align:center;color:var(--text-muted);">No recommendations yet. Click <strong>+ Add Stock</strong> to get started.</td></tr>`;
+    if (!activeTab) {
+      tbody.innerHTML = `<tr><td colspan="14" style="padding:60px 0;text-align:center;color:var(--text-muted);">No tabs found. Create a new tab to continue.</td></tr>`;
       return;
     }
 
-    const sorted = [...recommendations].sort((a, b) => {
+    if (!scoped.length) {
+      tbody.innerHTML = `<tr><td colspan="14" style="padding:60px 0;text-align:center;color:var(--text-muted);">No stocks in <strong>${esc(activeTab.name)}</strong>. Click <strong>+ Add Stock</strong> to add one.</td></tr>`;
+      return;
+    }
+
+    const sorted = [...scoped].sort((a, b) => {
       const order = { Active: 0, Watching: 1, Exited: 2, 'Stopped Out': 3 };
       const oa = order[a.status] ?? 9, ob = order[b.status] ?? 9;
       if (oa !== ob) return oa - ob;
@@ -821,7 +1047,7 @@
   }
 
   function openEditModal(id) {
-    const rec = recommendations.find(r => r.id === id);
+    const rec = getActiveRecommendations().find(r => r.id === id);
     if (!rec) return;
     editingId = id;
     $('modal-title').textContent = 'Edit Recommendation';
@@ -1073,6 +1299,13 @@
     const exchange  = $('f-exchange').value;
     const entryPrice = $('f-entry-price').value;
     const errEl = $('form-error');
+    const activeTab = getActiveTab();
+
+    if (!activeTab) {
+      errEl.textContent = 'Please create or select a tab first.';
+      errEl.style.display = 'block';
+      return;
+    }
 
     if (!stockName || !ticker || !exchange || !entryPrice) {
       errEl.textContent = 'Stock name, ticker, exchange, and entry price are required.';
@@ -1084,6 +1317,7 @@
       stock_name:  stockName,
       ticker:      ticker,
       exchange:    exchange,
+      watchlist_id: activeTabId,
       rec_date:    $('f-rec-date').value || null,
       entry_price: parseFloat(entryPrice),
       target1:     $('f-target1').value  ? parseFloat($('f-target1').value)  : null,
@@ -1113,6 +1347,7 @@
       }
 
       closeModal();
+      renderTabs();
       renderTable();
       updateStats();
 
@@ -1121,7 +1356,7 @@
       if (!prices[sym]) {
         fetch('/api/prices?symbols=' + encodeURIComponent(sym))
           .then(r => r.json())
-          .then(d => { Object.assign(prices, d); renderTable(); updateStats(); })
+          .then(d => { Object.assign(prices, d); persistPriceCache(); renderTable(); updateStats(); })
           .catch(() => {});
       }
     } catch (e) {
@@ -1131,24 +1366,132 @@
   }
 
   // ── Delete confirm ─────────────────────────────────────────────────────
-  function confirmDelete(id) {
-    const rec = recommendations.find(r => r.id === id);
-    if (!rec) return;
-    $('confirm-msg').textContent = `Delete "${rec.stock_name}"? This cannot be undone.`;
+  function openConfirmDialog(message, onConfirm) {
+    $('confirm-msg').textContent = message;
     $('confirm-overlay').style.display = 'flex';
 
     $('confirm-ok').onclick = async () => {
       $('confirm-overlay').style.display = 'none';
+      await onConfirm();
+    };
+    $('confirm-cancel').onclick = () => { $('confirm-overlay').style.display = 'none'; };
+  }
+
+  function confirmDelete(id) {
+    const rec = getActiveRecommendations().find(r => r.id === id);
+    if (!rec) return;
+    openConfirmDialog(`Delete "${rec.stock_name}" from "${getActiveTab().name}"? This cannot be undone.`, async () => {
       try {
-        const res = await fetch(`/api/recommendations/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/recommendations/${id}?watchlist_id=${activeTabId}`, { method: 'DELETE' });
         if (res.ok) {
           recommendations = recommendations.filter(r => r.id !== id);
+          renderTabs();
           renderTable();
           updateStats();
         }
-      } catch (e) { console.error('Delete failed:', e); }
-    };
-    $('confirm-cancel').onclick = () => { $('confirm-overlay').style.display = 'none'; };
+      } catch (e) {
+        console.error('Delete failed:', e);
+      }
+    });
+  }
+
+  async function createTab() {
+    const rawName = prompt('New tab name:');
+    if (rawName === null) return;
+    const name = normalizeTabName(rawName);
+    if (!name) {
+      alert('Tab name cannot be empty.');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/watchlists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Failed to create tab.');
+        return;
+      }
+
+      stockTabs.push(data);
+      setActiveTab(data.id, true);
+      renderTabs();
+      renderTable();
+      updateStats();
+      await refreshPrices(false);
+    } catch (e) {
+      alert('Failed to create tab: ' + e.message);
+    }
+  }
+
+  async function renameActiveTab() {
+    const activeTab = getActiveTab();
+    if (!activeTab) return;
+
+    const rawName = prompt('Rename tab:', activeTab.name);
+    if (rawName === null) return;
+    const name = normalizeTabName(rawName);
+    if (!name) {
+      alert('Tab name cannot be empty.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/watchlists/${activeTab.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Failed to rename tab.');
+        return;
+      }
+
+      stockTabs = stockTabs.map(t => t.id === activeTab.id ? { ...t, ...data } : t);
+      renderTabs();
+      renderTable();
+      updateStats();
+    } catch (e) {
+      alert('Failed to rename tab: ' + e.message);
+    }
+  }
+
+  async function deleteActiveTab() {
+    const activeTab = getActiveTab();
+    if (!activeTab) return;
+    if (stockTabs.length <= 1) {
+      alert('You must keep at least one tab.');
+      return;
+    }
+
+    openConfirmDialog(`Delete tab "${activeTab.name}" and all stocks inside it?`, async () => {
+      try {
+        const res = await fetch(`/api/watchlists/${activeTab.id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.error || 'Failed to delete tab.');
+          return;
+        }
+
+        stockTabs = stockTabs.filter(t => t.id !== activeTab.id);
+        recommendations = recommendations.filter(r => r.watchlist_id !== activeTab.id);
+
+        if (!setActiveTab(data.next_tab_id, true) && stockTabs.length) {
+          setActiveTab(stockTabs[0].id, true);
+        }
+
+        renderTabs();
+        renderTable();
+        updateStats();
+        await refreshPrices(false);
+      } catch (e) {
+        alert('Failed to delete tab: ' + e.message);
+      }
+    });
   }
 
   // ── Event listeners ────────────────────────────────────────────────────
@@ -1157,6 +1500,9 @@
   $('modal-cancel-btn').addEventListener('click', closeModal);
   $('modal-save-btn').addEventListener('click', saveForm);
   $('refresh-btn').addEventListener('click', () => refreshPrices(true));
+  $('new-tab-btn').addEventListener('click', createTab);
+  $('rename-tab-btn').addEventListener('click', renameActiveTab);
+  $('delete-tab-btn').addEventListener('click', deleteActiveTab);
 
   $('modal-overlay').addEventListener('click', e => {
     if (e.target === $('modal-overlay')) closeModal();
@@ -1207,7 +1553,20 @@
   // ── Boot ───────────────────────────────────────────────────────────────
   (async () => {
     try {
-      await loadRecommendations();
+      loadCachedPrices();
+      await Promise.all([loadTabs(), loadRecommendations()]);
+
+      const savedTabId = Number.parseInt(localStorage.getItem(ACTIVE_TAB_STORAGE_KEY), 10);
+      if (Number.isInteger(savedTabId) && stockTabs.some(t => t.id === savedTabId)) {
+        activeTabId = savedTabId;
+      } else {
+        activeTabId = stockTabs[0]?.id || null;
+      }
+      persistActiveTab();
+
+      renderTabs();
+      renderTable();
+      updateStats();
       refreshPrices(false);
     } catch (e) {
       $('stocks-tbody').innerHTML = `<tr><td colspan="14" style="padding:40px;text-align:center;color:var(--red);">Failed to load: ${esc(e.message)}</td></tr>`;
