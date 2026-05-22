@@ -24,6 +24,7 @@ ENV/
 htmlcov/
 
 # Build and packaging artifacts
+graphify-out/
 build/
 dist/
 *.egg-info/
