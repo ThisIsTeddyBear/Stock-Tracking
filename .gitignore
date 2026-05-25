@@ -33,6 +33,7 @@ pip-wheel-metadata/
 
 # IDE/editor files
 .vscode/
+.codex/
 .idea/
 *.swp
 *.swo
@@ -41,3 +42,5 @@ pip-wheel-metadata/
 # OS files
 .DS_Store
 Thumbs.db
+AGENTS.md
+CLAUDE.md
