@@ -1,8 +1,7 @@
-import time
 import requests as req_lib
 from flask import Flask, render_template, request, jsonify
 import database as db
-from price_fetcher import fetch_price
+from price_fetcher import fetch_prices_batch
 
 app = Flask(__name__)
 
@@ -267,14 +266,7 @@ def get_prices():
             return jsonify({"error": "symbols query parameter required"}), 400
 
         symbols = [s.strip() for s in symbols_param.split(",") if s.strip()]
-        results = {}
-
-        for i, symbol in enumerate(symbols):
-            if i > 0:
-                time.sleep(0.3)
-            results[symbol] = fetch_price(symbol)
-
-        return jsonify(results)
+        return jsonify(fetch_prices_batch(symbols))
 
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500

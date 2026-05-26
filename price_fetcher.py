@@ -2,6 +2,53 @@ import datetime
 import yfinance as yf
 
 
+def fetch_prices_batch(symbols: list) -> dict:
+    fetched_at = datetime.datetime.utcnow().isoformat()
+    results = {s: {"symbol": s, "price": None, "fetched_at": fetched_at, "error": None} for s in symbols}
+
+    if not symbols:
+        return results
+
+    try:
+        data = yf.download(" ".join(symbols), period="2d", progress=False, auto_adjust=True)
+
+        if data.empty:
+            for s in symbols:
+                results[s]["error"] = "No data returned"
+            return results
+
+        close = data["Close"]
+
+        if len(symbols) == 1:
+            sym = symbols[0]
+            col = close.dropna()
+            if not col.empty and float(col.iloc[-1]) > 0:
+                results[sym]["price"] = round(float(col.iloc[-1]), 4)
+            else:
+                results[sym]["error"] = "No price data"
+        else:
+            for sym in symbols:
+                if sym not in close.columns:
+                    results[sym]["error"] = "Symbol not found"
+                    continue
+                col = close[sym].dropna()
+                if col.empty:
+                    results[sym]["error"] = "No price data"
+                    continue
+                price = float(col.iloc[-1])
+                if price > 0:
+                    results[sym]["price"] = round(price, 4)
+                else:
+                    results[sym]["error"] = "Price is zero or negative"
+
+    except Exception as exc:
+        for s in symbols:
+            if results[s]["price"] is None and results[s]["error"] is None:
+                results[s]["error"] = str(exc)
+
+    return results
+
+
 def fetch_price(yf_symbol: str) -> dict:
     fetched_at = datetime.datetime.utcnow().isoformat()
     result = {"symbol": yf_symbol, "price": None, "fetched_at": fetched_at, "error": None}
