@@ -87,6 +87,7 @@ def create_recommendation():
             "watchlist_id": watchlist_id,
             "rec_date": data.get("rec_date") or None,
             "entry_price": float(data["entry_price"]),
+            "exit_price": float(data["exit_price"]) if data.get("exit_price") else None,
             "target1": float(data["target1"]) if data.get("target1") else None,
             "target2": float(data["target2"]) if data.get("target2") else None,
             "target3": float(data["target3"]) if data.get("target3") else None,
@@ -140,7 +141,7 @@ def update_recommendation(rec_id):
         ):
             return jsonify({"error": "This stock already exists in the selected tab"}), 409
 
-        for field in ["entry_price", "target1", "target2", "target3", "stop_loss"]:
+        for field in ["entry_price", "exit_price", "target1", "target2", "target3", "stop_loss"]:
             if field in data and data[field] is not None and data[field] != "":
                 data[field] = float(data[field])
             elif field in data and data[field] == "":

@@ -19,27 +19,25 @@ def fetch_prices_batch(symbols: list) -> dict:
 
         close = data["Close"]
 
-        if len(symbols) == 1:
-            sym = symbols[0]
-            col = close.dropna()
-            if not col.empty and float(col.iloc[-1]) > 0:
-                results[sym]["price"] = round(float(col.iloc[-1]), 4)
-            else:
+        # yfinance returns a Series for a single ticker on older versions and a
+        # single-column DataFrame on newer versions.  Normalise to DataFrame so
+        # the loop below works identically for 1 or N symbols.
+        if not hasattr(close, "columns"):
+            close = close.to_frame(name=symbols[0])
+
+        for sym in symbols:
+            if sym not in close.columns:
+                results[sym]["error"] = "Symbol not found"
+                continue
+            col = close[sym].dropna()
+            if col.empty:
                 results[sym]["error"] = "No price data"
-        else:
-            for sym in symbols:
-                if sym not in close.columns:
-                    results[sym]["error"] = "Symbol not found"
-                    continue
-                col = close[sym].dropna()
-                if col.empty:
-                    results[sym]["error"] = "No price data"
-                    continue
-                price = float(col.iloc[-1])
-                if price > 0:
-                    results[sym]["price"] = round(price, 4)
-                else:
-                    results[sym]["error"] = "Price is zero or negative"
+                continue
+            price = float(col.iloc[-1])
+            if price > 0:
+                results[sym]["price"] = round(price, 4)
+            else:
+                results[sym]["error"] = "Price is zero or negative"
 
     except Exception as exc:
         for s in symbols:

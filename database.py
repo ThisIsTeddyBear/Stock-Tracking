@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS {TABLE_RECOMMENDATIONS} (
     watchlist_id INTEGER,
     rec_date    TEXT,
     entry_price REAL NOT NULL,
+    exit_price  REAL,
     target1     REAL,
     target2     REAL,
     target3     REAL,
@@ -119,6 +120,8 @@ def _ensure_recommendations_schema(conn):
     }
     if "watchlist_id" not in cols:
         conn.execute(f"ALTER TABLE {TABLE_RECOMMENDATIONS} ADD COLUMN watchlist_id INTEGER")
+    if "exit_price" not in cols:
+        conn.execute(f"ALTER TABLE {TABLE_RECOMMENDATIONS} ADD COLUMN exit_price REAL")
 
 
 def _ensure_default_tab(conn) -> int:
@@ -221,10 +224,10 @@ def insert(data: dict):
             """
             INSERT INTO recommendations
                 (stock_name, ticker, exchange, yf_symbol, watchlist_id, rec_date, entry_price,
-                 target1, target2, target3, stop_loss, notes, status)
+                 exit_price, target1, target2, target3, stop_loss, notes, status)
             VALUES
                 (:stock_name, :ticker, :exchange, :yf_symbol, :watchlist_id, :rec_date, :entry_price,
-                 :target1, :target2, :target3, :stop_loss, :notes, :status)
+                 :exit_price, :target1, :target2, :target3, :stop_loss, :notes, :status)
             """,
             data,
         )
@@ -239,7 +242,7 @@ def update(rec_id: int, data: dict):
     try:
         allowed = {
             "stock_name", "ticker", "exchange", "yf_symbol", "rec_date",
-            "entry_price", "target1", "target2", "target3", "stop_loss",
+            "entry_price", "exit_price", "target1", "target2", "target3", "stop_loss",
             "notes", "status", "watchlist_id",
         }
         fields = {k: v for k, v in data.items() if k in allowed}
